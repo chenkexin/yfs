@@ -1,0 +1,298 @@
+// RPC stubs for clients to talk to lock_server, and cache the locks
+// see lock_client.cache.h for protocol details.
+
+#include "lock_client_cache.h"
+#include "rpc.h"
+#include <sstream>
+#include <iostream>
+#include <stdio.h>
+#include "tprintf.h"
+
+using namespace std;
+ 
+int lock_client_cache::last_port = 0;
+
+lock_client_cache::lock_client_cache(std::string xdst, 
+				     class lock_release_user *_lu)
+  : lock_client(xdst), lu(_lu)
+{
+  srand(time(NULL)^last_port);
+  rlock_port = ((rand()%32000) | (0x1 << 10));
+  const char *hname;
+  // VERIFY(gethostname(hname, 100) == 0);
+  hname = "127.0.0.1";
+  std::ostringstream host;
+  host << hname << ":" << rlock_port;
+  id = host.str();
+  last_port = rlock_port;
+  rpcs *rlsrpc = new rpcs(rlock_port);
+  rlsrpc->reg(rlock_protocol::revoke, this, &lock_client_cache::revoke_handler);
+  rlsrpc->reg(rlock_protocol::retry, this, &lock_client_cache::retry_handler);
+
+  cond_ = new Condition(mutex_); 
+}
+
+lock_protocol::status
+lock_client_cache::acquire(lock_protocol::lockid_t lid)
+{
+    cout<<"----------in lock_client::acquire the acquiring lock:"<<lid<<endl;
+    int ret = lock_protocol::OK;
+  int r;
+  //the client now may not nessessary call the server rpc every time.
+  //if wants, following code may help.
+  //this->cl->call(lock_protocol::acquire, this->id, lid, r);  
+  /*
+   * When client want to acquire a lock, do as following.
+   * 1. check the lock info table to see if it already has the lock. If not, send remote acquire, if it does, do seperately according to its lock state:
+   *  (1). none: send remote acquire
+   *  (2). free: get it.
+   *  (3). locked: wait it.
+   *  (4). acquiring: wait it.
+   *  (5). releasing: wait it.
+   *
+   * 2. when been waked up by signal, first check the lock's state, if it is:
+   *  (1). revoke: that means it must give the lock back right now. so call the release to release the lock. then go to wait on this lock again.
+   *  (2). retry: the return value means nothing, it's different than retry_handler, whick should try to get the lock right now.
+   *  so the state means we just wait on the lock, and wait. 
+   *  (3). freed: get it, returns OK.
+   *  others' processing is similar to the instructions above.
+   * */
+   // MutexLockGuard(mutex_);
+ 
+ //note to check the return value when call remote acquire. 
+    
+    std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
+ cout<<"acquire 1"<<endl;
+    iter = lockinfo_map.find(lid);
+    int ret_temp;
+  if(iter != lockinfo_map.end())
+  {
+          MutexLockGuard lock(mutex_);
+ cout<<"acquire 2"<<endl;
+      switch(iter->second.lock_state)
+      {
+      case c_state::none:
+          cout<<"acquire 3"<<endl;
+          iter->second.set(c_state::acquiring);
+          ret_temp = this->cl->call(lock_protocol::acquire, this->id, lid, r);
+          if(ret_temp == lock_protocol::OK)
+          {
+              iter->second.set(c_state::locked);
+              iter->second.is_silent = false;
+              return ret;
+          }
+          else if(ret_temp == rlock_protocol::retry)
+          {
+              //iter->second.set(c_state::none);
+              lock.unlock();
+              wait(lid);
+              this->acquire(lid);
+          }
+      case c_state::retry:
+ cout<<"acquire 4"<<endl;
+          iter->second.set(c_state::acquiring);
+          ret_temp = this->cl->call(lock_protocol::acquire, this->id, lid, r);
+          if(ret_temp == lock_protocol::OK)
+          {
+              iter->second.set(c_state::locked);
+              iter->second.is_silent = false;
+              return ret;
+          }
+          else if(ret_temp == rlock_protocol::retry)
+          {
+              lock.unlock();
+              //iter->second.set(c_state::none);
+              cout<<"retry lock should never get a return value of protocol::Retry!"<<endl;
+          }
+      case c_state::free:
+          iter->second.set(c_state::locked);
+ cout<<"acquire 5"<<endl;
+          iter->second.is_silent = false;
+          return ret;
+      default:
+      break;
+      }
+  }
+  //if the lock is not initialized locally
+  else
+  {
+       MutexLockGuard lock(mutex_); 
+          cout<<"acquire 7"<<endl;
+          c_lockInfo temp;
+          temp.set(c_state::acquiring);
+          lockinfo_map.insert(std::pair<lock_protocol::lockid_t, c_lockInfo>(lid, temp));
+          int temp_ret = this->cl->call(lock_protocol::acquire, this->id, lid, r);
+     
+      if(temp_ret == lock_protocol::OK)
+      {
+          //here cannot call this->acquire directly
+          //in case of endless recursive function call
+
+          std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
+          iter = lockinfo_map.find(lid);
+          if(iter != lockinfo_map.end())
+              iter->second.set(c_state::locked);
+          else 
+              cout<<"error that shall never happen"<<endl;
+          iter->second.is_silent = false;
+          return ret;
+      }
+      if(temp_ret == rlock_protocol::retry)
+      {
+          //add the lock info
+          cout<<"acquire 13"<<endl;
+          lock.unlock();
+          wait(lid);
+          cout<<"wake up from acquire waiting"<<endl;
+          this->acquire(lid);
+      }
+  }
+}
+
+int lock_client_cache::wait(lock_protocol::lockid_t lid)
+{
+    MutexLockGuard lock(mutex_);
+    //the variable waiting here is the lock's state
+    cout<<"---------------------in wait"<<endl; 
+    cout<<"in wait, the stata:"<<lockinfo_map.find(lid)->second.lock_state<<endl;
+    cout<<"free code:"<<c_state::free<<endl;
+    while(lockinfo_map.find(lid)->second.lock_state != c_state::free && (lockinfo_map.find(lid)->second.if_revoke_before== false))
+    {
+        cout<<"finally wait"<<endl;
+        cond_->wait();
+        if(lockinfo_map.find(lid)->second.lock_state == c_state::retry && (lockinfo_map.find(lid)->second.if_revoke_before == false)) break;
+        cout<<"wake check"<<lockinfo_map.find(lid)->second.lock_state<<"  the if_revoke_before:"<<lockinfo_map.find(lid)->second.if_revoke_before<<endl;
+    }
+    cout<<"**wake in wait!"<<endl;
+    //assert(lockinfo_map.find(lid)->second.lock_state != c_state::free);
+    //now it has been waken up.
+    //do other checking works.
+}
+
+
+lock_protocol::status
+lock_client_cache::release(lock_protocol::lockid_t lid)
+{
+    MutexLockGuard lock(mutex_);
+    cout<<"------in client release, lock:"<<lid<<endl;
+    std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
+    iter = lockinfo_map.find(lid);
+cout<<"release 1"<<endl;
+    int r;
+    if(iter != lockinfo_map.end() )
+    {
+cout<<"release 2"<<endl;
+    if(iter->second.if_revoke_before == true)
+    {
+    cout<<"release 7"<<endl;
+     this->cl->call(lock_protocol::release, this->id, lid, r);
+        //iter->second.set(c_state::none);
+        //iter->second.if_revoke_before = false;
+     //should delete the element in the map.
+     lockinfo_map.erase(iter);   
+     cout<<"release 8"<<endl;
+        cond_->notify();
+        return lock_protocol::OK;
+}
+        switch(iter->second.lock_state)
+        {
+            case c_state::free:
+cout<<"release 3"<<endl;
+                cond_->notify();
+                break;
+            case c_state::locked:
+cout<<"release 4"<<endl;
+                iter->second.set(c_state::free);
+                //cond_->notify();
+                iter->second.is_silent = true;
+                break;
+            case c_state::releasing:
+                lock.unlock();
+                wait(lid);
+                this->acquire(lid);
+            case c_state::acquiring:
+cout<<"release 6"<<endl;
+                lock.unlock();
+                wait(lid);
+                this->acquire(lid);
+                break;
+            case c_state::retry:
+                iter->second.set(c_state::free);
+                cond_->notify();
+                break;
+        }
+    }
+cout<<"finish releas"<<endl;
+  return lock_protocol::OK;
+
+}
+
+rlock_protocol::status
+lock_client_cache::revoke_handler(lock_protocol::lockid_t lid, 
+                                  int &)
+{
+//    MutexLockGuard lock(mutex_);
+  int ret = rlock_protocol::OK;
+ cout<<"----in revoke"<<endl; 
+  //should give back the lock.
+
+  std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
+  iter = lockinfo_map.find(lid);
+
+  if( iter != lockinfo_map.end() )
+  {
+      cout<<"revoke 1"<<endl;
+      //iter->second.set(c_state::revoke);
+      //iter->second.set(c_state::free);
+      iter->second.if_revoke_before = true;
+  }
+
+  if(iter->second.is_silent)
+  {
+      cout<<"revoke 2"<<endl;
+      int r;
+     this->cl->call(lock_protocol::release, this->id, lid, r);
+        //iter->second.if_revoke_before = false;
+     //should delete the element in the map.
+     
+     lockinfo_map.erase(iter);   
+   //test adding illustration 
+  }
+      cout<<"revoke 3"<<endl;
+  //if this notify nessessary?
+//  cond_->notify();
+  return ret;
+}
+
+rlock_protocol::status
+lock_client_cache::retry_handler(lock_protocol::lockid_t lid, 
+                                 int &)
+{
+    cout<<"-----in client retry_handler"<<endl;
+  int ret = rlock_protocol::OK;
+  std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
+
+  iter = lockinfo_map.find(lid);
+  if( iter != lockinfo_map.end() )
+  {
+      cout<<" retry 1"<<endl;
+      iter->second.set(c_state::retry);
+  }
+  else
+  {
+      cout<<"retry 2"<<endl;
+      c_lockInfo temp;
+      //temp.lock_state = c_state::free;
+      temp.set(c_state::retry);
+      lockinfo_map.insert(std::pair<lock_protocol::lockid_t, c_lockInfo>(lid, temp));
+  }
+  std::cout<<"*************retry is going to notif*******************"<<endl;
+  cond_->notify();
+  return ret;
+}
+
+void c_lockInfo::set(int status)
+{
+    MutexLockGuard lock(mutex_);
+    this->lock_state = status;
+}
