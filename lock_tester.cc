@@ -193,10 +193,10 @@ main(int argc, char *argv[])
     printf("cache lock client\n");
     for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
 
-  if(!test || test == 1){
+ /* if(!test || test == 1){
       test1();
     }
-
+*/
     if(!test || test == 2){
       // test2
       for (int i = 0; i < nt; i++) {
@@ -209,7 +209,7 @@ main(int argc, char *argv[])
       }
     }
 
-/*    if(!test || test == 3){
+    if(!test || test == 3){
       printf("test 3\n");
       
       // test3
@@ -251,7 +251,7 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-*/
+
     printf ("%s: passed all tests successfully\n", argv[0]);
 
 }

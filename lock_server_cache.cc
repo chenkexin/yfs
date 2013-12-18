@@ -12,6 +12,7 @@
 using namespace std;
 lock_server_cache::lock_server_cache()
 {
+  cond_ = new Condition(mutex_);
 }
 
 
@@ -38,6 +39,7 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
   */
   std::map<lock_protocol::lockid_t, s_lockInfo>::iterator iter;
   iter = lockinfo_map.find(lid);
+  cout<<"acquire 1, host:"<<id<<endl;
   if(iter != lockinfo_map.end())
   {
     //the lock info is in the table
@@ -45,24 +47,32 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
     switch(iter->second.lock_state)
     {
       case state::free:
+  cout<<"acquire 2, host:"<<id<<endl;
         iter->second.set_client(id);
         iter->second.set(state::used);
         return lock_protocol::OK;
        // break;
       case state::used:
+  cout<<"acquire 3, host:"<<id<<endl;
         //send revoke to previous one and then wait.
         if(iter->second.wait_queue.size() == 0)
         {
           //there is no client waiting on the lock, yet a client holds the lock, so revoke it.
+  cout<<"acquire 4, host:"<<id<<endl;
           this->revoke_helper(lid, iter->second.client_id, id);
+        
+          iter->second.wait_queue.push_back(id);
         }
         else
         {
           //there are some other clients waiting on the lock, revoke the previous one.
+  cout<<"acquire 5, host:"<<id<<endl;
           this->revoke_helper(lid, iter->second.wait_queue.back(), id);
+          iter->second.wait_queue.push_back(id);
         }
 
         lock.unlock();
+        cout<<"unlock the lock"<<endl;
         wait(lid, id);
         this->acquire(id, lid, r);
         break;
@@ -72,8 +82,10 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
   {
     //the lock has not been initialized
     s_lockInfo temp;
+  cout<<"acquire 6, host:"<<id<<endl;
     temp.set_client(id);
     temp.set(state::used);
+    lockinfo_map.insert(std::pair<lock_protocol::lockid_t, s_lockInfo>(lid, temp));
     return lock_protocol::OK;
   }
 
@@ -139,6 +151,7 @@ void lock_server_cache::wait(lock_protocol::lockid_t lid, std::string id)
   //condition remains to be verify.
   while(lockinfo_map.find(lid)->second.lock_state == state::used)
   {
+    cout<<"finally wait"<<endl;
     cond_->wait();
   }
   cout<<"wake up from wait"<<endl;
@@ -155,6 +168,7 @@ int lock_server_cache::revoke_helper(lock_protocol::lockid_t lid, std::string ci
   {
      ret = cl->call(rlock_protocol::revoke, lid, r);
   }
+  cout<<"finish client revoke"<<endl;
   return ret;
 }
 

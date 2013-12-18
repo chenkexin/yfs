@@ -74,7 +74,6 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
       case c_state::none:
           cout<<"acquire 3"<<" cid"<<cid<<endl;
           iter->second.set(c_state::acquiring);
-         cout<<"-------------stat::none-----------------------------------------calling remote acquire:"<<cid<<endl;
           ret_temp = this->cl->call(lock_protocol::acquire, this->id, lid, r);
           if(ret_temp == lock_protocol::OK)
           {
@@ -165,7 +164,6 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
           c_lockInfo temp;
           temp.set(c_state::acquiring);
           lockinfo_map.insert(std::pair<lock_protocol::lockid_t, c_lockInfo>(lid, temp));
-         cout<<"-----------------------------not initialize-------------------------calling remote acquire"<<cid<<endl;
           int temp_ret = this->cl->call(lock_protocol::acquire, this->id, lid, r);
     
          cout<<"finish remote call:"<<cid<<endl; 
@@ -228,13 +226,12 @@ cout<<"release 1"<<" cid:"<<cid<<endl;
 cout<<"release 2"<<" cid:"<<cid<<endl;
     if(iter->second.if_revoke_before == true)
     {
-    cout<<"release 7"<<" cid:"<<cid<<endl;
+     cout<<"release 7"<<" cid:"<<cid<<endl;
      //lockinfo_map.erase(iter);   
      iter->second.set(c_state::none);
      this->cl->call(lock_protocol::release, this->id, lid, r);
      iter->second.if_revoke_before =false;
      //should delete the element in the map.
-     cout<<"release 8"<<" cid:"<<cid<<endl;
      cout<<"^^^^^^^^^^^^^^^^^^^cid: "<<cid<<" going to notify"<<endl;
      cond_->notify();
         return lock_protocol::OK;
@@ -253,15 +250,16 @@ cout<<"release 4"<<" cid:"<<cid<<endl;
                 iter->second.set(c_state::free);
      cout<<"^^^^^^^^^^^^^^^^^cid: "<<cid<<" going to notify"<<endl;
                 cond_->notify();
-                
                // iter->second.is_silent = true;
                 break;
             case c_state::releasing:
                 iter->second.set(c_state::free);
+       cout<<"^^^^^^^^^^^^releasing release"<<endl;
                 cond_->notify();
                 break;
             case c_state::acquiring:
                 iter->second.set(c_state::free);
+                cout<<"^^^^^^^^^^acquiring release"<<endl;
                 cond_->notify();
                 break;
             case c_state::retry:
@@ -295,24 +293,6 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
   cout<<"revoke 0"<<endl;
   //carefully exame this 
 
-  if(iter != lockinfo_map.end() && (iter->second.lock_state == c_state::free) )
-  {
-      cout<<"revoke 2"<<endl;
-      int r;
-    // this->cl->call(lock_protocol::release, this->id, lid, r);
-        //iter->second.if_revoke_before = false;
-     //should delete the element in the map.
-    
-     iter->second.if_revoke_before = true; 
-     //lockinfo_map.erase(iter);
-     iter->second.set(c_state::none);
-     //iter->second.is_silent = false;   
-  std::cout<<"*************revoke is going to notif*******************"<<endl;
-     this->cond_->notify();
-     return rlock_protocol::RESET;
-     //test adding illustration 
-  }
-      cout<<"revoke 3"<<endl;
   if( iter != lockinfo_map.end())
   {
       cout<<"revoke 1"<<endl;
