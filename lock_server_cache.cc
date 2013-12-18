@@ -16,10 +16,10 @@ lock_server_cache::lock_server_cache()
 
 
 int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid, 
-                               int &)
+                               int &r)
 {
    MutexLockGuard lock(mutex_);
-  lock_protocol::status ret = lock_protocol::OK;
+  //lock_protocol::status ret = lock_protocol::OK;
   cout<<"---in acquire, lock id:"<<lid<<" the host:"<<id<<endl; 
   /*
     * When server receive an acquiring to certain lock, it must do several things like following:
@@ -37,178 +37,46 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
    if then, the lock state indicates the lock can be granted(retry), then retry the acquiring, if not, just finish the acquire.
   */
   std::map<lock_protocol::lockid_t, s_lockInfo>::iterator iter;
- 
   iter = lockinfo_map.find(lid);
-    cout<<"in acquire 1, lock:"<<lid<<" host:"<<id<<endl;
-  if( iter != lockinfo_map.end())
+  if(iter != lockinfo_map.end())
   {
-      switch(iter->second.lock_state)
-      {
-          case state::free:
-    cout<<"in acquire 2, lock:"<<lid<<" ******** get the lock ****host:"<<id<<endl;
-    iter->second.set_client(id);
-    iter->second.set(state::used);
-      cout<<"****************************return acquire*********"<<endl;
-    return lock_protocol::OK;
-   case state::retry:
-          cout<<"in acquire 15"<<endl;
-          //current client id should be the client id that should get the lock
-          if(iter->second.client_id.compare(id) == 0)
-          {
-              cout<<"in acquire 16"<<endl;
-              iter->second.set(state::used);
-              cout<<"****************get the lock id is:"<<iter->second.wait_queue.front()<<endl;
-              cout<<"queue size:"<<iter->second.wait_queue.size()<<endl;
-              iter->second.wait_queue.pop_front();
-              cout<<"queue size after:"<<iter->second.wait_queue.size()<<endl;
-              if(iter->second.wait_queue.size() != 0)
-                cout<<"front ele:"<<iter->second.wait_queue.front()<<endl;
-                
-              cout<<"****************************return acquire*********"<<endl;
-              return lock_protocol::OK;
-          }
-          else
-          {
-              cout<<"in acquire 20"<<endl;
-          //send revoke to previous one if there does not contains itself in the waiting queue
+    //the lock info is in the table
+    //then check the state of the lock.
+    switch(iter->second.lock_state)
+    {
+      case state::free:
+        iter->second.set_client(id);
+        iter->second.set(state::used);
+        return lock_protocol::OK;
+       // break;
+      case state::used:
+        //send revoke to previous one and then wait.
+        if(iter->second.wait_queue.size() == 0)
+        {
+          //there is no client waiting on the lock, yet a client holds the lock, so revoke it.
+          this->revoke_helper(lid, iter->second.client_id, id);
+        }
+        else
+        {
+          //there are some other clients waiting on the lock, revoke the previous one.
+          this->revoke_helper(lid, iter->second.wait_queue.back(), id);
+        }
 
-          if( (find(iter->second.wait_queue.begin(), iter->second.wait_queue.end(), id)) == iter->second.wait_queue.end()) 
-          {
-            if(iter->second.wait_queue.size() == 0)
-            {
-              iter->second.set_client(id);
-              iter->second.set(state::used);
-              return rlock_protocol::retry;
-            }
-            else
-            {
-              cout<<"in acquire: send revoke to the previous: "<<iter->second.wait_queue.back()<<endl;
-          handle h(iter->second.wait_queue.back());
-      
-                  iter->second.wait_queue.push_back(id);
-
-          rpcc *cl = h.safebind();
-          if(cl)
-          {
-              int r;
-              int ret_temp = cl->call(rlock_protocol::revoke, lid, r);
-      cout<<"****************************return acquire*********"<<endl;
-              return rlock_protocol::retry;
-          }
-            }
-          }
-
-         else
-         {cout<<"****************************return acquire*********"<<endl;
-             return rlock_protocol::retry;
-         }
-          }
-         return rlock_protocol::retry; 
-      //if the wait queue is not empty, you should be carefule about revoke opt to revoke the right client.
-   case state::used:
-
-         if(iter->second.client_id.compare(id) == 0)
-         {
-           return lock_protocol::OK;
-         }
-         else
-         {
-         cout<<"in acquire 17"<<endl;
-          if(iter->second.wait_queue.size() == 0)
-              {
-      //add current acquiring client to the waiting list.
-      //check if the queue has alredy holds the id's info
-          iter->second.wait_queue.push_back(id);
-      cout<<"in acquire 3, lock:"<<lid<<" host:"<<id<<endl;
-      //use handler to revoke the currently holding client.
-      //should using the id in wait_queue, not the passing-in argument.
-      cout<<"the queue size:"<<iter->second.wait_queue.size()<<endl;
-      handle h (iter->second.client_id);
-      //iter->second.client_id.clear();
-      rpcc *cl = h.safebind();
-
-      cout<<"in acquire 4, lock:"<<lid<<" host:"<<id<<endl;
-      if(cl)
-      {
-          int r;
-          cout<<"going to send revoke to client:"<<iter->second.client_id<<endl;
-          //the client's revoke function will not call the release function.
-        //  lock.unlock();
-          int ret_temp2 = cl->call(rlock_protocol::revoke, lid, r);
-          //only here can a revoke return RESET
-            if(ret_temp2 == rlock_protocol::RESET)
-          {
-            iter->second.set_client(id);
-            iter->second.set(state::used);
-            cout<<"********************** reset get lock, id:"<<id<<endl;
-            //delete the entry in waiting list
-            cout<<"queue front:"<<iter->second.wait_queue.front()<<endl;
-            iter->second.wait_queue.pop_front();
-            return lock_protocol::OK;
-          }
-      }
-      cout<<"****************************return acquire*********"<<endl;
-          return rlock_protocol::retry;
-              }
-      else
-      {
-        //waiting queue is not null
-          if( (find(iter->second.wait_queue.begin(), iter->second.wait_queue.end(), id)) == iter->second.wait_queue.end()) 
-          {
-              cout<<"in acquire: send revoke to the previous: "<<iter->second.wait_queue.back()<<endl;
-          handle h(iter->second.wait_queue.back());
-      
-                  iter->second.wait_queue.push_back(id);
-
-          rpcc *cl = h.safebind();
-          if(cl)
-          {
-              int r;
-               int ret_temp3 = cl->call(rlock_protocol::revoke, lid, r);
-           
-          }
-      cout<<"****************************return acquire*********"<<endl;
-          return rlock_protocol::retry;
-          }
-
-         else
-         {
-          cout<<"in the waiting list, request for twice"<<endl;
-          cout<<"queue size:"<<iter->second.wait_queue.size()<<" and front:"<<iter->second.wait_queue.front()<<endl; 
-           cout<<"current client id:"<<iter->second.client_id<<endl;
-          cout<<"****************************return acquire*********"<<endl;
-           handle h(iter->second.client_id);
-           rpcc *cl = h.safebind();
-           if(cl)
-           {
-             int r;
-             int ret_temp4 = cl->call(rlock_protocol::revoke, lid, r);
-             if(ret_temp4 == rlock_protocol::RESET) 
-             {
-               iter->second.client_id = id;
-               return lock_protocol::OK;
-             }
-             else return rlock_protocol::retry;
-           }
-         }
-      }
+        lock.unlock();
+        wait(lid, id);
+        this->acquire(id, lid, r);
+        break;
     }
-      }
   }
   else
   {
-      cout<<"in acquire 6, lock:"<<lid<<" host:"<<id<<endl;
-      //the lock has not been initialize.
-      s_lockInfo temp;
-      temp.set(state::used);
-      temp.set_client(id);
-      lockinfo_map.insert(std::pair<lock_protocol::lockid_t, s_lockInfo>(lid, temp));
-      cout<<"****************************return acquire*********"<<endl;
-      return lock_protocol::OK;
-
+    //the lock has not been initialized
+    s_lockInfo temp;
+    temp.set_client(id);
+    temp.set(state::used);
+    return lock_protocol::OK;
   }
- 
-      cout<<"****************************return acquire*********"<<endl;
+
 }
 
 int 
@@ -217,9 +85,7 @@ lock_server_cache::release(std::string id, lock_protocol::lockid_t lid,
 {
     MutexLockGuard lock(mutex_);
     std::cout<<"-----in release. lock:"<<lid<<" *********** release on host:"<<id<<endl;
-  lock_protocol::status ret = lock_protocol::OK;
  
-   cout<<"1"<<endl; 
   /*
    * When a server receive a release to certain lock, it must do several thing s as following:
    * 1. Clear the client_id, that is modify the int to zero.
@@ -227,43 +93,20 @@ lock_server_cache::release(std::string id, lock_protocol::lockid_t lid,
    *    list is null, then modify the lock state to free.
    * */
 
-   //what if a thread is requiring to release a lock it doesn't held?
-  std::map<lock_protocol::lockid_t, s_lockInfo>::iterator iter;
-  iter = lockinfo_map.find( lid);
-  string retry_id;
-   cout<<"2"<<endl; 
-  if(iter != lockinfo_map.end())
-  {
+    std::map<lock_protocol::lockid_t, s_lockInfo>::iterator iter;
+    iter = lockinfo_map.find(lid);
+    if(iter != lockinfo_map.end())
+    {
       if(iter->second.client_id.compare(id) == 0)
       {
-          //current id is the releasing id
-      //clear the client id.
-          iter->second.client_id.clear();
-
-          iter->second.set(state::retry); 
-   cout<<"3"<<endl; 
-     
-     cout<<"the queue size:"<<iter->second.wait_queue.size()<<endl; 
-     if(iter->second.wait_queue.size() > 0)
-     { 
-     retry_id = iter->second.wait_queue.front();
-      iter->second.set_client(retry_id);
-     }
+        iter->second.client_id.clear();
+        iter->second.set(state::free);
+        this->retry_helper(lid, id);
       }
-      //release a unheld lock
-       else
-       {
-         return ret;
-       }
-  }
-   cout<<"5"<<endl;
-   if(!retry_id.empty())
-      release_helper(retry_id, lid);
-
-  cout<<"release lock"<<endl;
-  return ret;
+    }
+    
 }
-void lock_server_cache::release_helper(std::string id, lock_protocol::lockid_t lid)
+/*void lock_server_cache::release_helper(std::string id, lock_protocol::lockid_t lid)
 {
     cout<<"in release_helper, going to retry lock:"<<lid<<" on host:"<<id<<endl;  
     handle h_retry(id);
@@ -287,6 +130,39 @@ void lock_server_cache::release_helper(std::string id, lock_protocol::lockid_t l
               cout<<"remote retry finish"<<endl;
               }
           }
+}*/
+
+void lock_server_cache::wait(lock_protocol::lockid_t lid, std::string id)
+{
+  //condition wait
+  MutexLockGuard lock(mutex2_);
+  //condition remains to be verify.
+  while(lockinfo_map.find(lid)->second.lock_state == state::used)
+  {
+    cond_->wait();
+  }
+  cout<<"wake up from wait"<<endl;
+}
+
+int lock_server_cache::revoke_helper(lock_protocol::lockid_t lid, std::string cid, std::string rid)
+{
+  //this function is to revoke the specific client. rid is revoker's id, cid is revokee's id.
+  int r;
+  int ret = 0;
+  handle h(cid);
+  rpcc* cl = h.safebind();
+  if(cl)
+  {
+     ret = cl->call(rlock_protocol::revoke, lid, r);
+  }
+  return ret;
+}
+
+void lock_server_cache::retry_helper(lock_protocol::lockid_t lid, std::string rid)
+{
+  //this function is to send retry message to the specific client.
+  //rid is the retry_helper caller's id.
+  cond_->notify(); 
 }
 
 lock_protocol::status

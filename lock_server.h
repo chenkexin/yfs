@@ -92,7 +92,7 @@ enum l_state
     free = 0x9003,
     used,
     retry
-};
+};//is *retry* neccessary when re-design the server using condition variable?
 };
 class s_lockInfo
 {

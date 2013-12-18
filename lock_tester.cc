@@ -136,7 +136,7 @@ test5(void *x)
   int i = * (int *) x;
 
  // printf ("test5: client %d acquire a release a concurrent; same and diff clnt\n", i);
-  for (int j = 0; j < 1; j++) {
+  for (int j = 0; j < 10; j++) {
     if (i < 5) 
     {
         lc[0]->acquire(a, i);
@@ -192,7 +192,7 @@ main(int argc, char *argv[])
     //for (int i = 0; i < nt; i++) lc[i] = new lock_client(dst);
     printf("cache lock client\n");
     for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
-/*
+
   if(!test || test == 1){
       test1();
     }
@@ -209,7 +209,7 @@ main(int argc, char *argv[])
       }
     }
 
-    if(!test || test == 3){
+/*    if(!test || test == 3){
       printf("test 3\n");
       
       // test3
@@ -235,7 +235,7 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-    */
+    
 
     if(!test || test == 5){
       printf("test 5\n");
@@ -251,7 +251,7 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
-
+*/
     printf ("%s: passed all tests successfully\n", argv[0]);
 
 }
