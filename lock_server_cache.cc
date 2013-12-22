@@ -38,6 +38,8 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
    if then, the lock state indicates the lock can be granted(retry), then retry the acquiring, if not, just finish the acquire.
   */
   std::map<lock_protocol::lockid_t, s_lockInfo>::iterator iter;
+  std::deque<std::string>::iterator iter_temp;
+  
   iter = lockinfo_map.find(lid);
   cout<<"acquire 1, host:"<<id<<endl;
   if(iter != lockinfo_map.end())
@@ -50,8 +52,17 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
   cout<<"acquire 2, host:"<<id<<endl;
         iter->second.set_client(id);
         iter->second.set(state::used);
+        if((iter_temp = find(iter->second.wait_queue.begin(), iter->second.wait_queue.end(), id)) != iter->second.wait_queue.end())
+          iter->second.wait_queue.erase(iter_temp);
+        if(iter->second.wait_queue.size() != 0)
+        {
+          return lock_protocol::RESET;
+        }
+        else
+        {
         return lock_protocol::OK;
-       // break;
+      //  break;
+        }
       case state::used:
   cout<<"acquire 3, host:"<<id<<endl;
         //send revoke to previous one and then wait.
@@ -59,23 +70,68 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
         {
           //there is no client waiting on the lock, yet a client holds the lock, so revoke it.
   cout<<"acquire 4, host:"<<id<<endl;
-          this->revoke_helper(lid, iter->second.client_id, id);
-        
-          iter->second.wait_queue.push_back(id);
+          int ret = this->revoke_helper(lid, iter->second.client_id, id);
+          if(ret == rlock_protocol::RESET)
+          {
+            //give the lock to the acquiring id.
+            iter->second.set_client(id);
+            
+            return lock_protocol::OK;
+          }
+          else
+          {
+            iter->second.wait_queue.push_back(id);
+            lock.unlock();
+            wait(lid, id);
+            this->acquire(id, lid, r);
+          }
+
         }
         else
         {
-          //there are some other clients waiting on the lock, revoke the previous one.
+          //there are some other clients waiting on the lock.
   cout<<"acquire 5, host:"<<id<<endl;
-          this->revoke_helper(lid, iter->second.wait_queue.back(), id);
-          iter->second.wait_queue.push_back(id);
-        }
+          //check if itself is in the list, if it is, then continue to wait. If it isn't, broadcast the revoke information, then go to wait..
+  if( find(iter->second.wait_queue.begin(),iter->second.wait_queue.end(), id) == iter->second.wait_queue.end()) 
+    {
+        // the id is not in waiting queue.
+      //at first, notify current holding client.  
+      int ret = this->revoke_helper(lid, iter->second.client_id, id);
+          if(ret == rlock_protocol::RESET)
+          {
+            //give the lock to the acquiring id.
+            iter->second.set_client(id);
+            
+            return lock_protocol::OK;
+          }
 
+          //then, broadcast to wait queue
+      for( int i = 0; i < iter->second.wait_queue.size(); i++)
+      {
+          int ret2 = this->revoke_helper(lid, iter->second.wait_queue[i], id);
+          if(ret2 == rlock_protocol::RESET)
+          {
+            iter->second.set_client(id);
+            //delete the released one.
+            iter->second.wait_queue.erase(iter->second.wait_queue.begin()+i);
+            return lock_protocol::OK;
+          }
+       }
+      cout<<"end broadcast"<<endl;
+          iter->second.wait_queue.push_back(id);
+       
         lock.unlock();
-        cout<<"unlock the lock"<<endl;
         wait(lid, id);
         this->acquire(id, lid, r);
-        break;
+    }
+    else
+    {
+      //continue to wait.
+      lock.unlock();
+      wait(lid, id);
+      this->acquire(id, lid, r);
+    }
+  }
     }
   }
   else
@@ -168,7 +224,7 @@ int lock_server_cache::revoke_helper(lock_protocol::lockid_t lid, std::string ci
   {
      ret = cl->call(rlock_protocol::revoke, lid, r);
   }
-  cout<<"finish client revoke"<<endl;
+  cout<<"finish client revoke, the revoke client id:"<<cid<<endl;
   return ret;
 }
 

@@ -84,6 +84,12 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
               cout<<"the if_revoke_before:"<<iter->second.if_revoke_before<<endl;
               return ret;
           }
+          if(ret_temp == lock_protocol::RESET)
+          {
+            iter->second.set(c_state::locked);
+            iter->second.if_revoke_before = true;
+            return ret;
+          }
           else if(ret_temp == rlock_protocol::retry)
           {
               lock.unlock();
@@ -103,6 +109,12 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
               cout<<"cid:"<<cid<<"get the lock*************"<<endl;
               cout<<"the if_revoke_before:"<<iter->second.if_revoke_before<<endl;
               return ret;
+          }
+          if(ret_temp == lock_protocol::RESET)
+          {
+            iter->second.set(c_state::locked);
+            iter->second.if_revoke_before = true;
+            return ret;
           }
           else if(ret_temp == rlock_protocol::retry)
           {
@@ -133,6 +145,12 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
               cout<<"cid:"<<cid<<"get the lock*************"<<endl;
               cout<<"the if_revoke_before:"<<iter->second.if_revoke_before<<endl;
               return ret;
+          }
+          if(ret_temp == lock_protocol::RESET)
+          {
+            iter->second.set(c_state::locked);
+            iter->second.if_revoke_before = true;
+            return ret;
           }
           else if(ret_temp == rlock_protocol::retry)
           {
@@ -166,19 +184,23 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
           lockinfo_map.insert(std::pair<lock_protocol::lockid_t, c_lockInfo>(lid, temp));
           int temp_ret = this->cl->call(lock_protocol::acquire, this->id, lid, r);
     
-         cout<<"finish remote call:"<<cid<<endl; 
       if(temp_ret == lock_protocol::OK)
       {
           //here cannot call this->acquire directly
           //in case of endless recursive function call
-
-        iter->second.set(c_state::locked);
-        cout<<"wake check"<<lockinfo_map.find(lid)->second.lock_state<<"  the if_revoke_before:"<<lockinfo_map.find(lid)->second.if_revoke_before<<endl;
+         std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter2;
+         iter2 = lockinfo_map.find(lid);
+         iter2->second.set(c_state::locked);
           
              // iter->second.is_silent = false;
-              cout<<"cid:"<<cid<<"get the lock*************"<<endl;
               cout<<"the if_revoke_before:"<<iter->second.if_revoke_before<<endl;
           return ret;
+      }
+      if(ret_temp == lock_protocol::RESET)
+      {
+            iter->second.set(c_state::locked);
+            iter->second.if_revoke_before = true;
+            return ret;
       }
       if(temp_ret == rlock_protocol::retry)
       {
@@ -202,7 +224,7 @@ int lock_client_cache::wait(lock_protocol::lockid_t lid, int cid)
         cout<<"finally wait"<<endl;
         cond_->wait();
         cout<<"free code:"<<c_state::free<<endl;
-        cout<<"wake check"<<lockinfo_map.find(lid)->second.lock_state<<"  the if_revoke_before:"<<lockinfo_map.find(lid)->second.if_revoke_before<<endl;
+        cout<<"wake check"<<lockinfo_map.find(lid)->second.lock_state<<"  the if_revoke_before:"<<lockinfo_map.find(lid)->second.if_revoke_before<<"the none code:"<<c_state::none<<endl;
     }
         cout<<"cid:"<<cid<<" wake check"<<lockinfo_map.find(lid)->second.lock_state<<"  the if_revoke_before:"<<lockinfo_map.find(lid)->second.if_revoke_before<<endl;
     cout<<"cid:"<<cid<<"**wake in wait!"<<endl;
@@ -230,7 +252,7 @@ cout<<"release 2"<<" cid:"<<cid<<endl;
      //lockinfo_map.erase(iter);   
      iter->second.set(c_state::none);
      this->cl->call(lock_protocol::release, this->id, lid, r);
-     iter->second.if_revoke_before =false;
+     iter->second.set_revoke(false);
      //should delete the element in the map.
      cout<<"^^^^^^^^^^^^^^^^^^^cid: "<<cid<<" going to notify"<<endl;
      cond_->notify();
@@ -289,16 +311,21 @@ lock_client_cache::revoke_handler(lock_protocol::lockid_t lid,
 
   std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter;
   iter = lockinfo_map.find(lid);
-  cout<<"map size:"<<lockinfo_map.size()<<endl;
   cout<<"revoke 0"<<endl;
   //carefully exame this 
 
+  if( iter != lockinfo_map.end() && iter->second.lock_state == c_state::free)
+  {
+    //should be that no thread is using the lock, it shall be safe to return it back to server.
+    iter->second.set(c_state::none);
+    return rlock_protocol::RESET;
+  }
   if( iter != lockinfo_map.end())
   {
       cout<<"revoke 1"<<endl;
      // iter->second.set(c_state::none);
       
-      iter->second.if_revoke_before = true;
+      iter->second.set_revoke(true);
       cout<<"has set the revoke = true:"<<true<<endl;
       cout<<"current state::"<<iter->second.lock_state<<endl;
       std::cout<<"*************revoke is going to notif*******************"<<endl;
@@ -346,4 +373,9 @@ void c_lockInfo::set(int status)
 {
     MutexLockGuard lock(mutex_);
     this->lock_state = status;
+}
+void c_lockInfo::set_revoke(bool b)
+{
+  MutexLockGuard lock(mutex_);
+  this->if_revoke_before = b;
 }

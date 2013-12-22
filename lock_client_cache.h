@@ -46,13 +46,13 @@ class c_lockInfo
     int lock_state;
 
     bool if_revoke_before;    
-    bool is_silent;
+//    bool is_silent;
     public:
    c_lockInfo():lock_state(c_state::none){
        if_revoke_before = false;
-       is_silent = false;
    };
    void set(int);
+   void set_revoke(bool);
 };
 
 class lock_client_cache : public lock_client {
