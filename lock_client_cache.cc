@@ -198,8 +198,10 @@ lock_client_cache::acquire(lock_protocol::lockid_t lid, int cid)
       }
       if(ret_temp == lock_protocol::RESET)
       {
-            iter->second.set(c_state::locked);
-            iter->second.if_revoke_before = true;
+         std::map<lock_protocol::lockid_t, c_lockInfo>::iterator iter2;
+         iter2 = lockinfo_map.find(lid);
+            iter2->second.set(c_state::locked);
+            iter2->second.if_revoke_before = true;
             return ret;
       }
       if(temp_ret == rlock_protocol::retry)
