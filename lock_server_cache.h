@@ -19,7 +19,7 @@ class lock_server_cache {
  public:
   lock_server_cache();
   lock_protocol::status stat(lock_protocol::lockid_t, int &);
-  int acquire(std::string id, lock_protocol::lockid_t, int &);
+  int acquire(std::string id, lock_protocol::lockid_t, int&);
   int release(std::string id, lock_protocol::lockid_t, int &);
   void wait(lock_protocol::lockid_t, std::string id);
   int revoke_helper(lock_protocol::lockid_t, std::string cid, std::string rid);

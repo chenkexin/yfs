@@ -57,23 +57,23 @@ void
 test1(void)
 {
     printf ("acquire a release a acquire a release a\n");
-    lc[0]->acquire(a, 0);
+    lc[0]->acquire(a);
     check_grant(a);
-    lc[0]->release(a,0);
+    lc[0]->release(a);
     check_release(a);
-    lc[0]->acquire(a,0);
+    lc[0]->acquire(a);
     check_grant(a);
-    lc[0]->release(a,0);
+    lc[0]->release(a);
     check_release(a);
 
     printf ("acquire a acquire b release b release a\n");
-    lc[0]->acquire(a,0);
+    lc[0]->acquire(a);
     check_grant(a);
-    lc[0]->acquire(b,0);
+    lc[0]->acquire(b);
     check_grant(b);
-    lc[0]->release(b,0);
+    lc[0]->release(b);
     check_release(b);
-    lc[0]->release(a,0);
+    lc[0]->release(a);
     check_release(a);
 }
 
@@ -85,14 +85,14 @@ test2(void *x)
   cout<<"in test2:"<<endl;
 
   printf ("test2: client %d acquire a release a\n", i);
-  lc[i]->acquire(a, i);
+  lc[i]->acquire(a);
   printf ("test2: client %d acquire done\n", i);
   check_grant(a);
   sleep(1);
   printf ("test2: client %d release\n", i);
   check_release(a);
   
-  lc[i]->release(a, i);
+  lc[i]->release(a);
   printf ("test2: client %d release done\n", i);
   return 0;
 }
@@ -104,11 +104,11 @@ test3(void *x)
 
   //printf ("[test3]: client %d acquire a release a concurrent\n", i);
   for (int j = 0; j < 10; j++) {
-      lc[i]->acquire(a, i);
+      lc[i]->acquire(a);
     check_grant(a);
     printf ("[test3]: client %d got lock\n", i);
     check_release(a);
-    lc[i]->release(a, i);
+    lc[i]->release(a);
 
   }
   return 0;
@@ -121,11 +121,11 @@ test4(void *x)
 
   printf ("test4: thread %d acquire a release a concurrent; same clnt\n", i);
   for (int j = 0; j < 10; j++) {
-    lc[0]->acquire(a, i);
+    lc[0]->acquire(a);
     check_grant(a);
     printf ("test4: thread %d on client 0 got lock\n", i);
     check_release(a);
-    lc[0]->release(a, i);
+    lc[0]->release(a);
   }
   return 0;
 }
@@ -139,21 +139,21 @@ test5(void *x)
   for (int j = 0; j < 10; j++) {
     if (i < 5) 
     {
-        lc[0]->acquire(a, i);
+        lc[0]->acquire(a);
     }
     else 
     {
-        lc[1]->acquire(a, i);
+        lc[1]->acquire(a);
     }
     check_grant(a);
     printf ("test5: client %d got lock\n", i);
     check_release(a);
     if (i < 5)
     {
-        lc[0]->release(a,i);
+        lc[0]->release(a);
     }
     else {
-        lc[1]->release(a,i);
+        lc[1]->release(a);
     }
   }
   return 0;
@@ -222,6 +222,7 @@ main(int argc, char *argv[])
 	pthread_join(th[i], NULL);
       }
     }
+  
     if(!test || test == 4){
       printf("test 4\n");
       

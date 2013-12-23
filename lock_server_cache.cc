@@ -16,12 +16,11 @@ lock_server_cache::lock_server_cache()
 }
 
 
-int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid, 
-                               int &r)
+int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid, int& )
 {
    MutexLockGuard lock(mutex_);
+   int r;
   //lock_protocol::status ret = lock_protocol::OK;
-  cout<<"---in acquire, lock id:"<<lid<<" the host:"<<id<<endl; 
   /*
     * When server receive an acquiring to certain lock, it must do several things like following:
    1. check the lockInfo map to see if the lock has been granted to other client, if not, grant it, if it does, do step 2.
@@ -41,7 +40,6 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
   std::deque<std::string>::iterator iter_temp;
   
   iter = lockinfo_map.find(lid);
-  cout<<"acquire 1, host:"<<id<<endl;
   if(iter != lockinfo_map.end())
   {
     //the lock info is in the table
@@ -49,33 +47,34 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
     switch(iter->second.lock_state)
     {
       case state::free:
-  cout<<"acquire 2, host:"<<id<<endl;
         iter->second.set_client(id);
         iter->second.set(state::used);
         if((iter_temp = find(iter->second.wait_queue.begin(), iter->second.wait_queue.end(), id)) != iter->second.wait_queue.end())
           iter->second.wait_queue.erase(iter_temp);
-        if(iter->second.wait_queue.size() != 0)
+        
+        if(iter->second.wait_queue.size() > 0)
         {
           return lock_protocol::RESET;
         }
         else
         {
         return lock_protocol::OK;
-      //  break;
+      // // break;
         }
+        break;
       case state::used:
-  cout<<"acquire 3, host:"<<id<<endl;
         //send revoke to previous one and then wait.
         if(iter->second.wait_queue.size() == 0)
         {
           //there is no client waiting on the lock, yet a client holds the lock, so revoke it.
-  cout<<"acquire 4, host:"<<id<<endl;
           int ret = this->revoke_helper(lid, iter->second.client_id, id);
           if(ret == rlock_protocol::RESET)
           {
             //give the lock to the acquiring id.
             iter->second.set_client(id);
-            
+           if(iter->second.wait_queue.size() > 0)
+             return lock_protocol::RESET;
+           else
             return lock_protocol::OK;
           }
           else
@@ -90,7 +89,6 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
         else
         {
           //there are some other clients waiting on the lock.
-  cout<<"acquire 5, host:"<<id<<endl;
           //check if itself is in the list, if it is, then continue to wait. If it isn't, broadcast the revoke information, then go to wait..
   if( find(iter->second.wait_queue.begin(),iter->second.wait_queue.end(), id) == iter->second.wait_queue.end()) 
     {
@@ -101,7 +99,9 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
           {
             //give the lock to the acquiring id.
             iter->second.set_client(id);
-            
+           if(iter->second.wait_queue.size() > 0)
+             return lock_protocol::RESET;
+           else
             return lock_protocol::OK;
           }
 
@@ -114,12 +114,13 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
             iter->second.set_client(id);
             //delete the released one.
             iter->second.wait_queue.erase(iter->second.wait_queue.begin()+i);
+           if(iter->second.wait_queue.size() > 0)
+             return lock_protocol::RESET;
+           else
             return lock_protocol::OK;
           }
        }
-      cout<<"end broadcast"<<endl;
           iter->second.wait_queue.push_back(id);
-       
         lock.unlock();
         wait(lid, id);
         this->acquire(id, lid, r);
@@ -148,11 +149,9 @@ int lock_server_cache::acquire(std::string id, lock_protocol::lockid_t lid,
 }
 
 int 
-lock_server_cache::release(std::string id, lock_protocol::lockid_t lid, 
-         int &r)
+lock_server_cache::release(std::string id, lock_protocol::lockid_t lid, int& r)
 {
     MutexLockGuard lock(mutex_);
-    std::cout<<"-----in release. lock:"<<lid<<" *********** release on host:"<<id<<endl;
  
   /*
    * When a server receive a release to certain lock, it must do several thing s as following:
@@ -207,10 +206,8 @@ void lock_server_cache::wait(lock_protocol::lockid_t lid, std::string id)
   //condition remains to be verify.
   while(lockinfo_map.find(lid)->second.lock_state == state::used)
   {
-    cout<<"finally wait"<<endl;
     cond_->wait();
   }
-  cout<<"wake up from wait"<<endl;
 }
 
 int lock_server_cache::revoke_helper(lock_protocol::lockid_t lid, std::string cid, std::string rid)
@@ -224,7 +221,6 @@ int lock_server_cache::revoke_helper(lock_protocol::lockid_t lid, std::string ci
   {
      ret = cl->call(rlock_protocol::revoke, lid, r);
   }
-  cout<<"finish client revoke, the revoke client id:"<<cid<<endl;
   return ret;
 }
 
