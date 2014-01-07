@@ -5,7 +5,7 @@ the writing buf_c is:P
 6
 in extent_server:, the size of buf is:0the context:
 5
-the writing buf_c is:xte·8B¼	
+the writing buf_c is:xtd·8‚F	
 6
 extent_server: get 1
 	im: get_inode 1
@@ -18,9 +18,9 @@ put_inode: 	im: put_inode 2
 extent_server: get 1
 	im: get_inode 1
 im->read_file return size:0
-in extent_server:, the size of buf is:13the context:|^d26635^*2*|
+in extent_server:, the size of buf is:13the context:|^d28376^*2*|
 5
-the writing buf_c is:|^d26635^*2*|
+the writing buf_c is:|^d28376^*2*|
 	im: get_inode 1
 put_inode: 	im: put_inode 1
 6
@@ -33,7 +33,7 @@ extent_server: getattr 2
 extent_server: get 1
 	im: get_inode 1
 im->read_file return size:13
-************reading inode:1 ***buf assign:|^d26635^*2*|
+************reading inode:1 ***buf assign:|^d28376^*2*|
 extent_server: getattr 2
 	im: get_inode 2
 extent_server: getattr 2
@@ -43,7 +43,7 @@ extent_server: getattr 2
 extent_server: get 1
 	im: get_inode 1
 im->read_file return size:13
-************reading inode:1 ***buf assign:|^d26635^*2*|
+************reading inode:1 ***buf assign:|^d28376^*2*|
 extent_server: getattr 2
 	im: get_inode 2
 extent_server: getattr 2
@@ -85,7 +85,7 @@ put_inode: 	im: put_inode 3
 extent_server: get 1
 	im: get_inode 1
 im->read_file return size:13
-************reading inode:1 ***buf assign:|^d26635^*2*|
+************reading inode:1 ***buf assign:|^d28376^*2*|
 extent_server: getattr 2
 	im: get_inode 2
 extent_server: getattr 2

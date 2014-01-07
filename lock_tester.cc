@@ -193,7 +193,7 @@ main(int argc, char *argv[])
     printf("cache lock client\n");
     for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
 
-/*  if(!test || test == 1){
+  if(!test || test == 1){
       test1();
     }
 
@@ -240,7 +240,7 @@ main(int argc, char *argv[])
 
     if(!test || test == 5){
       printf("test 5\n");
-  */    
+      
       // test 5
       
       for (int i = 0; i < nt; i++) {
