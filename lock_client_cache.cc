@@ -13,7 +13,7 @@ using namespace std;
 int lock_client_cache::last_port = 0;
 
 lock_client_cache::lock_client_cache(std::string xdst, 
-				     class lock_release_user *_lu)
+                                     class lock_release_user *_lu)
   : lock_client(xdst), lu(_lu)
 {
   srand(time(NULL)^last_port);

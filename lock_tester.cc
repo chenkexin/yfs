@@ -194,7 +194,7 @@ main(int argc, char *argv[])
     for (int i = 0; i < nt; i++) lc[i] = new lock_client_cache(dst);
 
   if(!test || test == 1){
-      test1();
+//      test1();
     }
 
     if(!test || test == 2){

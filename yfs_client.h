@@ -6,7 +6,7 @@
 
 #include "lock_protocol.h"
 #include "lock_client.h"
-
+#include "lock_client_cache.h"
 //=======
 #include <stdlib.h>
 //>>>>>>> lab2
@@ -18,7 +18,7 @@
 class yfs_client {
   extent_client *ec;
     public:
-  lock_client *lc;
+  lock_client_cache *lc;
  public:
 
   typedef unsigned long long inum;
