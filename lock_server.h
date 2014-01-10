@@ -48,9 +48,7 @@ class MutexLockGuard
             //basically should not use this function
             mutex_.unlock();
         };
-        void lock()
-				{mutex_.lock();};
-         ~MutexLockGuard()
+        ~MutexLockGuard()
         {mutex_.unlock();}
     private:
         MutexLock& mutex_;
@@ -94,47 +92,29 @@ enum l_state
     free = 0x9003,
     used,
     retry
-};//is *retry* neccessary when re-design the server using condition variable?
+};
 };
 class s_lockInfo
 {
     private:
 
         MutexLock mutex_;
-        MutexLock cond_mutex_;
-        public:
-        Condition* cond_;
     public:
         string client_id;//this is used to find the client rpc connection
         int lock_state;
         std::deque<std::string> wait_queue;//the int is the client's id.        
-        s_lockInfo():lock_state(state::used)
-        {cond_ = new Condition(cond_mutex_);};
+        s_lockInfo():lock_state(state::used){};
         void setbit();
         void clearbit();
         bool getbit();
         void set(int);
-        
-        void wait()
-				{
-					while(lock_state == state::used)
-					{
-         cout<<"state::used:"<<state::used<<" and lock_state:"<<this->lock_state<<endl;
-               	cond_->wait();
-cout<<"wake up"<<endl;
-           } 
-				}
         void set_client(string id)
         {
+            MutexLockGuard lock(mutex_);
             this->client_id = id;
         }
 };
-class cid_lid_pair
-{
-public:
-lock_protocol::lockid_t lid;
-std::string cid;
-};
+
 class lock_server {
     private:
         MutexLock mutex_;
