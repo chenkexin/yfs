@@ -7,18 +7,18 @@
 #include <map>
 #include "extent_protocol.h"
 #include "inode_manager.h"
-
+#include "lock_server.h"
 class extent_server {
  protected:
-#if 0
+//if 0
   typedef struct extent {
     std::string data;
     struct extent_protocol::attr attr;
   } extent_t;
   std::map <extent_protocol::extentid_t, extent_t> extents;
-#endif
+//endif
   inode_manager *im;
-
+  MutexLock mutex_;
  public:
   extent_server();
   

@@ -13,9 +13,19 @@
 //#include "yfs_protocol.h"
 #include "extent_client.h"
 #include <vector>
+class extent_lock_releaser : public lock_release_user {
+    extent_client *ec;
+public:
+    extent_lock_releaser(extent_client * e) : ec(e) {};
+    void dorelease(lock_protocol::lockid_t lid)
+    {
+        int ret = ec->flush(lid);
+    };
+};
 
 
 class yfs_client {
+  extent_lock_releaser* elr;
   extent_client *ec;
     public:
   lock_client *lc;

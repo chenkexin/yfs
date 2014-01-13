@@ -25,8 +25,9 @@ int extent_server::create(uint32_t type, extent_protocol::extentid_t &id)
 
 int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
 {
+  MutexLockGuard lock(mutex_);
   id &= 0x7fffffff;
-  char* buf_c = (char*)malloc(buf.size());
+  /*char* buf_c = (char*)malloc(buf.size());
   int size = buf.size();
   std::cout<<"in extent_server:, the size of buf is:"<<buf.size();
   std::cout<<"the context:"<<buf<<endl;
@@ -37,11 +38,28 @@ int extent_server::put(extent_protocol::extentid_t id, std::string buf, int &)
   im->write_file(id, buf_c, size);
   std::cout<<"6"<<endl; 
   return extent_protocol::OK;
+*/
+  extent_protocol::attr a;
+  //a.mtime = a.ctime = a.atime = time(NULL);
+  bzero( &a, sizeof(extent_protocol::attr));  
+  a.size = buf.length();
+  //MutexLockGuard lock(mutext_);
+  std::map<extent_protocol::extentid_t, extent_t>::iterator iter;
+  iter = extents.find(id);
+  if (iter != extents.end()) 
+  {
+    a.atime = extents[id].attr.atime; 
+  }
+  extents[id].data= buf;
+  extents[id].attr = a;
+  return extent_protocol::OK;
+
 }
 
 int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
 {
-  printf("extent_server: get %lld\n", id);
+  MutexLockGuard lock(mutex_);
+/*  printf("extent_server: get %lld\n", id);
 
   id &= 0x7fffffff;
 
@@ -60,10 +78,23 @@ int extent_server::get(extent_protocol::extentid_t id, std::string &buf)
   }
 
   return extent_protocol::OK;
+  */ 
+  //MutexLockGuard lock(mutext_);
+  std::map<extent_protocol::extentid_t, extent_t>::iterator iter;
+  iter = extents.find(id);
+ if (iter == extents.end()) 
+ {
+    return extent_protocol::NOENT;
+  }
+  buf = extents[id].data;
+  extents[id].attr.atime = time(NULL);
+  return extent_protocol::OK;
+
 }
 
 int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr &a)
 {
+/*
   printf("extent_server: getattr %lld\n", id);
 
   id &= 0x7fffffff;
@@ -74,6 +105,16 @@ int extent_server::getattr(extent_protocol::extentid_t id, extent_protocol::attr
   a = attr;
 
   return extent_protocol::OK;
+*/
+MutexLockGuard lock(mutex_);
+  std::map<extent_protocol::extentid_t, extent_t>::iterator iter;
+    iter = extents.find(id);
+if (iter == extents.end()) 
+  {
+        return extent_protocol::NOENT;
+    }
+    a = extents[id].attr;
+    return extent_protocol::OK;
 }
 
 int extent_server::setattr(extent_protocol::extentid_t id, extent_protocol::attr &a )
@@ -86,11 +127,22 @@ int extent_server::setattr(extent_protocol::extentid_t id, extent_protocol::attr
 
 int extent_server::remove(extent_protocol::extentid_t id, int &)
 {
+/*
   printf("extent_server: remove %lld\n", id);
 
   id &= 0x7fffffff;
   im->remove_file(id);
  
   return extent_protocol::OK;
+*/
+    MutexLockGuard lock(mutex_);
+    std::map<extent_protocol::extentid_t, extent_t>::iterator iter;
+    iter = extents.find(id);
+    if (iter == extents.end())
+    {
+      return extent_protocol::NOENT;
+    }
+    extents.erase(iter);
+    return extent_protocol::OK;
 }
 
