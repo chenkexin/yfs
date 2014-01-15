@@ -77,6 +77,7 @@ class yfs_client {
   int write(inum, size_t, off_t, const char *, size_t &);
   int read(inum, size_t, off_t, std::string &);
   int unlink(inum,const char *);
+  inum rand_num(uint32_t type);
 };
 
 #endif 

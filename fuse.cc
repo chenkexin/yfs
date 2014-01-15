@@ -41,14 +41,11 @@ yfs_client::status
 getattr(yfs_client::inum inum, struct stat &st)
 {
     yfs_client::status ret;
-
     bzero(&st, sizeof(st));
-
     st.st_ino = inum;
-    
-    
 
     printf("getattr %016llx %d\n", inum, yfs->isfile(inum));
+    cout<<"is file? should be false, false is"<<false<<" yet:"<<yfs->isfile(inum)<<endl;
     if(yfs->isfile(inum)){
         yfs_client::fileinfo info;
         ret = yfs->getfile(inum, info);
@@ -64,6 +61,7 @@ getattr(yfs_client::inum inum, struct stat &st)
     } else {
         yfs_client::dirinfo info;
         ret = yfs->getdir(inum, info);
+        cout<<"yfs_client::OK : "<<yfs_client::OK<<" yet ret:"<<ret<<endl;
         if(ret != yfs_client::OK)
             return ret;
         st.st_mode = S_IFDIR | 0777;
@@ -178,19 +176,20 @@ fuseserver_read(fuse_req_t req, fuse_ino_t ino, size_t size,
      * and reply using fuse_reply_buf. 
      */
     std::cout<<"------------------------fuseserver_read"<<endl;
-#if 1
     // Change the above "#if 0" to "#if 1", and your code goes here
     string data;
     char* data_2;
-    yfs->read( ino, size, off, data );
+    int result = yfs->read( ino, size, off, data );
     //data.assign( data_2, size );
+    if(result == yfs_client::OK)
+    { 
     memcpy( data_2, data.data(), data.size() );
 
     std::cout<<"-----------------------------end fuseserver_read"<<endl;
     fuse_reply_buf( req, data_2, size); 
-#else
-    fuse_reply_err(req, ENOSYS);
-#endif
+    }
+    else
+      fuse_reply_err(req, ENOSYS);
 }
 
 //
@@ -266,6 +265,7 @@ fuseserver_createhelper(fuse_ino_t parent, const char *name,
     std::cout<<"-----------------------in fuseserver_createhelper"<<endl;
     yfs_client::inum ino_out;
     int ret = yfs->create(parent, name, mode, ino_out, type);
+    cout<<"ino_out:"<<ino_out<<endl;
     if( ret == yfs_client::OK )
     {
         getattr( ino_out, e->attr);
@@ -345,6 +345,7 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
      * remember to return e using fuse_reply_entry.
      */
     yfs_client::inum inum;
+    cout<<"parent ino:"<<parent<<" name:"<<name<<endl;
     int ret = yfs->lookup( parent, name, found, inum );
     if( ret == yfs_client::NOENT )
     {
@@ -355,10 +356,14 @@ fuseserver_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     {
         getattr( inum, e.attr);
         e.ino = inum;
+        cout<<"lookup 1"<<endl;
         fuse_reply_entry(req, &e);
     }
     else if( ret == yfs_client::OK )
     {
+       //getattr(inum, e.attr);
+       //e.ino = inum;
+       cout<<"lookup 2"<<endl;
       // fuse_reply_err(req, ENOENT);
         fuse_reply_entry( req, &e);
     }
@@ -463,11 +468,14 @@ void
 fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
         mode_t mode)
 {
+  cout<<"-----------------in fuseserver_mkdir"<<endl;
     struct fuse_entry_param e;
+    memset( &e, 0 , sizeof(e) );
     // In yfs, timeouts are always set to 0.0, and generations are always set to 0
     e.attr_timeout = 0.0;
     e.entry_timeout = 0.0;
     e.generation = 0;
+    //bzero(&e, sizeof(struct fuse_entry_param));
     // Suppress compiler warning of unused e.
     // (void) e;
     /*
@@ -475,19 +483,19 @@ fuseserver_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
      * note: you can use fuseserver_createhelper;
      * remember to return e using fuse_reply_entry.
      */
-#if 1
     // Change the above line to "#if 1", and your code goes here
-    
+   cout<<"in parent:"<<parent<<" name:"<<name<<endl; 
    yfs_client::status ret = fuseserver_createhelper( parent, name, mode, &e, extent_protocol::T_DIR);
    if(ret == yfs_client::OK || ret == yfs_client::EXIST)
    {
+     cout<<"--------------------return fuseserver_mkdir OK"<<endl;
        fuse_reply_entry( req, &e);
    } 
-   else fuse_reply_err( req, ENOENT );
-#else
-    fuse_reply_err(req, ENOSYS);
-#endif
-
+   else
+   {
+     cout<<"--------------------return fuseserver_mkdir not OK"<<endl;
+     fuse_reply_err( req, ENOENT );
+   }
 }
 
 //

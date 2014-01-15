@@ -2,7 +2,7 @@
 
 #ifndef extent_client_h
 #define extent_client_h
-
+#include "lock_server.h"
 #include <string>
 #include "extent_protocol.h"
 #include "extent_server.h"
@@ -38,7 +38,7 @@ bzero(&a, sizeof(extent_protocol::attr));
 class extent_client {
  private:
   rpcc *cl;
- 
+MutexLock mutex_; 
   std::map<extent_protocol::extentid_t, cache_info> cache;
 
  public:

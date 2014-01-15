@@ -28,6 +28,17 @@ yfs_client::n2i(std::string n)
     return finum;
 }
 
+
+yfs_client::inum yfs_client::rand_num(uint32_t type)
+{
+   inum ret = 0;
+   ret = (unsigned long long)((rand() & 0x7fffffff)|(type<<31));
+   ret &= 0xffffffff;
+   return ret;
+}
+
+
+
 std::string
 yfs_client::filename(inum inum)
 {
@@ -39,25 +50,34 @@ yfs_client::filename(inum inum)
 bool
 yfs_client::isfile(inum inum)
 {
+  cout<<"--in yfs_client::isfile"<<endl;
     extent_protocol::attr a;
-
-    lc->acquire(inum);
+     bzero(&a, sizeof(struct extent_protocol::attr));
+    //lc->acquire(inum);
 
     if (ec->getattr(inum, a) != extent_protocol::OK) {
         printf("error getting attr\n");
-        lc->release(inum);
+        //elr->dorelease(inum);
+        //lc->release(inum);
         return false;
     }
 
     if (a.type == extent_protocol::T_FILE) {
         printf("isfile: %lld is a file\n", inum);
-        lc->release(inum);
+        //elr->dorelease(inum);
+        //lc->release(inum);
+        cout<<"--end yfs_client::isfile"<<endl;
         return true;
     } 
     printf("isfile: %lld is a dir\n", inum);
-    lc->release(inum);
+        //elr->dorelease(inum);
+    //lc->release(inum);
+        cout<<"--end yfs_client::isfile"<<endl;
     return false;
-}
+/*    if(inum & 0x80000000)
+          return true;
+      return false;*/
+ }
 
 bool
 yfs_client::isdir(inum inum)
@@ -148,6 +168,7 @@ yfs_client::setattr(inum ino, size_t size)
     ec->get( ino, buf );
     ec->put( ino, buf );
    
+        elr->dorelease(ino);
     lc->release(ino);
 
     return r;
@@ -165,6 +186,7 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out, ui
 {
     int r = OK;
 
+    cout<<"*******************8in parent:"<<parent<<" create file:"<<name<<endl;
     /*
      * your lab2 code goes here.
      * note: lookup is what you need to check if file exist;
@@ -175,9 +197,9 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out, ui
     //2. if not, create the file with inode, update the dir, and return the inode num.
     //3. if it exists, return the inode num that already exists.
     //
-    std::cout<<"require lock:"<<parent<<endl;
+   // std::cout<<"require lock:"<<parent<<endl;
    lc->acquire(parent); 
-   std::cout<<"in yfs_client::create:, holding lock:"<<parent<<endl; 
+   //std::cout<<"in yfs_client::create:, holding lock:"<<parent<<endl; 
     
     bool found;
     inum ino;
@@ -200,9 +222,11 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out, ui
         }
         //and modify the parent dir;
         string parent_block;
-
-     // lc->acquire(parent);
-//  lc->acquire(parent);
+        
+        //force the cache to flush, in order to get right disk data when 'get'
+        elr->dorelease(parent);
+        // lc->acquire(parent);
+        //  lc->acquire(parent);
         ec->get( parent, parent_block );
         string file_name = name;
         parent_block.append("|^"+file_name+"^");
@@ -217,8 +241,9 @@ yfs_client::create(inum parent, const char *name, mode_t mode, inum &ino_out, ui
         ec->put( parent, parent_block );   
   //  lc->release(parent);
     }
+        elr->dorelease(parent);
     lc->release(parent);
-    std::cout<<"releasing the lock:"<<parent<<endl;
+    std::cout<<"***************end of yfs_client::creat"<<endl;
     return r;
 }
 
@@ -226,7 +251,7 @@ int
 yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
 {
     int r = OK;
-
+cout<<"in yfs_client::lookup"<<endl;
     /*
      * your lab2 code goes here.
      * note: lookup file from parent dir according to name;
@@ -243,7 +268,7 @@ yfs_client::lookup(inum parent, const char *name, bool &found, inum &ino_out)
     {
         if( iter->name.compare(*file_name) == 0)
         {
-            ino_out = iter->inum;
+           ino_out = iter->inum;
             found = true;
             r = EXIST;
             break;
@@ -343,9 +368,9 @@ int
 yfs_client::read(inum ino, size_t size, off_t off, std::string &data)
 {
     int r = OK;
-    std::cout<<"require lock:"<<ino<<endl;
+    //std::cout<<"require lock:"<<ino<<endl;
 lc->acquire(ino);
-std::cout<<"in yfs_client::read, holding the lock:"<<ino<<endl;
+//std::cout<<"in yfs_client::read, holding the lock:"<<ino<<endl;
     /*
      * your lab2 code goes here.
      * note: read using ec->get().
@@ -353,9 +378,9 @@ std::cout<<"in yfs_client::read, holding the lock:"<<ino<<endl;
     string buf;
     //lc->acquire(ino);
     ec->get( ino, buf );
-
+elr->dorelease(ino);
     lc->release(ino);
-    std::cout<<"releasing the lock:"<<ino<<endl;
+  //  std::cout<<"releasing the lock:"<<ino<<endl;
     data = buf.substr( off, size );
     //data = buf;
     //lc->release(ino);
@@ -367,9 +392,9 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
         size_t &bytes_written)
 {
     int r = OK;
-    std::cout<<"require lock:"<<ino<<endl;
+    //std::cout<<"require lock:"<<ino<<endl;
  lc->acquire(ino);  
- std::cout<<"in yfs_client::write, holding the lock:"<<ino<<endl; 
+ //std::cout<<"in yfs_client::write, holding the lock:"<<ino<<endl; 
     /*
      * your lab2 code goes here.
      * note: write using ec->put().
@@ -412,9 +437,9 @@ yfs_client::write(inum ino, size_t size, off_t off, const char *data,
 
     //first assume the value is correct.
     bytes_written = size;
-    
+   elr->dorelease(ino); 
     lc->release(ino);
-    std::cout<<"releasing the lock:"<<ino<<endl;
+   // std::cout<<"releasing the lock:"<<ino<<endl;
     
     return r;
 }
@@ -423,29 +448,30 @@ int yfs_client::unlink(inum parent,const char *name)
 {
     int r = OK;
     std::cout<<"******************** in yfs_client::unlink"<<endl;
+    std::cout<<"in parent:"<<parent<<" unlink:"<<name<<endl;
     /*
      * your lab2 code goes here.
      * note: you should remove the file using ec->remove,
      * and update the parent directory content.
      */
  
-    std::cout<<"require lock:"<<parent<<endl;
+    //std::cout<<"require lock:"<<parent<<endl;
     lc->acquire(parent);
-    std::cout<<"yfs_client::unlink, holding the lock:"<<parent<<endl;
+   // std::cout<<"yfs_client::unlink, holding the lock:"<<parent<<endl;
     
     bool found;
     inum ino_out=0;
     this->lookup( parent, name, found, ino_out);
     if( ino_out == parent) return NOENT;
-    
-    std::cout<<"require lock:"<<ino_out<<endl;
+    //if(ino_out == parent) return OK;
+    //std::cout<<"require lock:"<<ino_out<<endl;
     lc->acquire(ino_out);
-    std::cout<<"in yfs_client::unlink, removing the file, holding lock:"<<ino_out<<endl;
+    //std::cout<<"in yfs_client::unlink, removing the file, holding lock:"<<ino_out<<endl;
     
     ec->remove(ino_out);
-    
+   elr->dorelease(ino_out); 
     lc->release(ino_out);
-    std::cout<<"releasing the lock:"<<ino_out<<endl;
+   // std::cout<<"releasing the lock:"<<ino_out<<endl;
     
     //and modify the parent block
     string buf;
@@ -463,6 +489,7 @@ int yfs_client::unlink(inum parent,const char *name)
     {
        string name_1 = split_str( *iter, trunc_2 );
        if( name_1.compare(name) == 0) continue;
+       else
        {
         string ino = split_str( *iter, trunc_3 );
         if( (!name_1.empty()) && (!ino.empty()))
@@ -473,11 +500,12 @@ int yfs_client::unlink(inum parent,const char *name)
        }
     }
     buf.swap(del_buf);
-    buf.resize(BLOCK_SIZE);
+   // buf.resize(BLOCK_SIZE);
    
     ec->put( parent, buf);
+    elr->dorelease(parent);
     lc->release(parent);
-    std::cout<<"releasing the lock:"<<parent<<endl;
+    //std::cout<<"releasing the lock:"<<parent<<endl;
     std::cout<<"*********************** finish yfs_client::unlink"<<endl;
     return r;
 }

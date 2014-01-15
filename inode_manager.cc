@@ -131,7 +131,7 @@ block_manager::block_manager()
   sb.ninodes = INODE_NUM;
 
   //initial the block begin at 3, since it is required to reserve space for super node, bitmap block and inode table.
-  cur_block = 50;
+  cur_block = 100;
 }
 
 void
